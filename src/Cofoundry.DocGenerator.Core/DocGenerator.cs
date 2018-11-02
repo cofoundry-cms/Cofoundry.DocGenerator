@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -16,6 +17,8 @@ namespace Cofoundry.DocGenerator.Core
     {
         private const string MARKDOWN_FILE_EXTENSION = ".md";
         private const string STATIC_FOLDER_NAME = "static";
+
+        private static HttpClient _httpClient = new HttpClient();
 
         private readonly IDestinationFileStoreService _fileWriterService;
         private readonly DocGeneratorSettings _docGeneratorSettings;
@@ -66,6 +69,15 @@ namespace Cofoundry.DocGenerator.Core
 
             // update the version manifest file in the root
             await UpdateVersionsAsync();
+
+            await PublishWebHook();
+        }
+
+        private async Task PublishWebHook()
+        {
+            if (string.IsNullOrEmpty(_docGeneratorSettings.OnCompleteWebHook)) return;
+
+            await _httpClient.PostAsync(_docGeneratorSettings.OnCompleteWebHook, null);
         }
 
         private async Task UpdateVersionsAsync()
