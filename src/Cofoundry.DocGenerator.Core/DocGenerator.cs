@@ -1,4 +1,5 @@
 ﻿using Cofoundry.Core;
+using Cofoundry.Core.Configuration;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
 using System;
@@ -25,7 +26,7 @@ namespace Cofoundry.DocGenerator.Core
 
             if (docGeneratorSettings.UseAzure)
             {
-                // todo: add azure service
+                _fileWriterService = new AzureBlobDestinationFileStoreService(_docGeneratorSettings);
             }
             else
             {

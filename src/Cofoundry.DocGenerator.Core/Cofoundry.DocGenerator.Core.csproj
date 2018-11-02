@@ -6,6 +6,7 @@
 
   <ItemGroup>
     <PackageReference Include="Cofoundry.Core" Version="0.5.0" />
+    <PackageReference Include="WindowsAzure.Storage" Version="9.3.2" />
   </ItemGroup>
 
 </Project>
