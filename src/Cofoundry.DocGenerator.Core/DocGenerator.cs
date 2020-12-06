@@ -122,8 +122,13 @@ namespace Cofoundry.DocGenerator.Core
             // otherwise order by title
             if (tableOfContents != null)
             {
+                var redirectNodes = resultNodes
+                    .Where(n => n.Value.RedirectTo != null)
+                    .Select(n => n.Value);
+
                 parentNode.Children = resultNodes
                     .FilterAndOrderByKeys(tableOfContents.Select(SlugFormatter.ToSlug))
+                    .Union(redirectNodes)
                     .ToList();
             }
             else
@@ -171,11 +176,12 @@ namespace Cofoundry.DocGenerator.Core
             {
                 var slug = SlugFormatter.ToSlug(redirect.Key);
                 var path = FilePathHelper.CombineVirtualPath(parentNode.Url, slug);
+                var redirectTo = FilePathHelper.CombineVirtualPath(parentNode.Url, redirect.Value);
                 var node = new DocumentationNode()
                 {
                     Title = redirect.Key,
-                    Url = slug,
-                    RedirectTo = redirect.Value,
+                    Url = path,
+                    RedirectTo = redirectTo,
                     UpdateDate= updateDate
                 };
 
