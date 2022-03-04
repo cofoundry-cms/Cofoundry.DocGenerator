@@ -42,7 +42,7 @@ namespace Cofoundry.DocGenerator.Core
             var version = _docGeneratorSettings.Version;
             var sourcePath = _docGeneratorSettings.SourcePath;
 
-            var staticFileFolder = FilePathHelper.CombineVirtualPath(STATIC_FOLDER_NAME, version);
+            var staticFileFolder = RelativePathHelper.Combine(STATIC_FOLDER_NAME, version);
 
             await _fileWriterService.EnsureDirectoryExistsAsync(version);
             await _fileWriterService.EnsureDirectoryExistsAsync(staticFileFolder);
@@ -61,11 +61,11 @@ namespace Cofoundry.DocGenerator.Core
             };
 
             // Copy files/directories recursively
-            await ProcessDirectory(sourcePath, rootNode);
+            await ProcessDirectory(sourcePath, rootNode, rootNode);
 
             // Write the completed table of contents file
             var serialized = JsonConvert.SerializeObject(rootNode, GetJsonSetting());
-            await _fileWriterService.WriteText(serialized, FilePathHelper.CombineVirtualPath(rootNode.Url, "toc.json"));
+            await _fileWriterService.WriteText(serialized, RelativePathHelper.Combine(rootNode.Url, "toc.json"));
 
             // update the version manifest file in the root
             await UpdateVersionsAsync();
@@ -85,15 +85,34 @@ namespace Cofoundry.DocGenerator.Core
             var rootDirectoryFiles = await _fileWriterService.GetDirectoryNamesAsync("/");
             var versions = rootDirectoryFiles
                 .Select(d => StringHelper.SplitAndTrim(d, Path.DirectorySeparatorChar).LastOrDefault())
-                .Where(d => Regex.IsMatch(d, "^\\d+\\.\\d+\\.\\d+$"))
+                .Select(ParseVersion)
+                .Where(v => v != null)
                 .OrderByDescending(v => v)
+                .Select(v=> v.ToString())
                 .ToList();
 
             var serialized = JsonConvert.SerializeObject(versions, GetJsonSetting());
             await _fileWriterService.WriteText(serialized, "/versions.json");
         }
 
-        private async Task ProcessDirectory(string directoryPath, DocumentationNode parentNode)
+        private VersionNumber ParseVersion(string folderName)
+        {
+            var match = Regex.Match(folderName, "^(\\d+)\\.(\\d+)\\.(\\d+)$");
+
+            if (!match.Success) return null;
+
+            var version = new VersionNumber()
+            {
+                Major = Int32.Parse(match.Groups[1].Value),
+                Minor = Int32.Parse(match.Groups[2].Value),
+                Patch = Int32.Parse(match.Groups[3].Value)
+            };
+
+            return version;
+
+        }
+
+        private async Task ProcessDirectory(string directoryPath, DocumentationNode parentNode, DocumentationNode rootNode)
         {
             var allFilePaths = Directory.GetFiles(directoryPath);
             if (allFilePaths.Length == 0) return;
@@ -101,13 +120,13 @@ namespace Cofoundry.DocGenerator.Core
             var resultNodes = new Dictionary<string, DocumentationNode>();
 
             // Read the redirects.json file if exists and map the contents
-            var redirects = await ProcessRedirects(resultNodes, parentNode, allFilePaths);
+            var redirects = await ProcessRedirects(resultNodes, parentNode, rootNode, allFilePaths);
 
             // if a directory level redirect was assigned, return.
             if (parentNode.RedirectTo != null) return;
 
             await ProcessFiles(resultNodes, parentNode, allFilePaths, redirects);
-            await ProcessChildDirectories(resultNodes, parentNode, directoryPath);
+            await ProcessChildDirectories(resultNodes, parentNode, rootNode, directoryPath);
 
             // Set ordering, set root file
             string[] tableOfContents = null;
@@ -143,6 +162,7 @@ namespace Cofoundry.DocGenerator.Core
         private static async Task<Dictionary<string, string>> ProcessRedirects(
             Dictionary<string, DocumentationNode> resultNodes,
             DocumentationNode parentNode,
+            DocumentationNode rootNode,
             string[] allFilePaths
             )
         {
@@ -175,8 +195,9 @@ namespace Cofoundry.DocGenerator.Core
             foreach (var redirect in redirects)
             {
                 var slug = SlugFormatter.ToSlug(redirect.Key);
-                var path = FilePathHelper.CombineVirtualPath(parentNode.Url, slug);
-                var redirectTo = FilePathHelper.CombineVirtualPath(parentNode.Url, redirect.Value);
+                var path = RelativePathHelper.Combine(parentNode.Url, slug);
+                var redirectBase = redirect.Value.StartsWith("/") ? rootNode.Url : parentNode.Url;
+                var redirectTo = RelativePathHelper.Combine(redirectBase, redirect.Value);
                 var node = new DocumentationNode()
                 {
                     Title = redirect.Key,
@@ -210,7 +231,7 @@ namespace Cofoundry.DocGenerator.Core
 
                 if (fileExtension == MARKDOWN_FILE_EXTENSION)
                 {
-                    var destinationFilePath = FilePathHelper.CombineVirtualPath(parentNode.Url, sluggedFileNameWithExtension);
+                    var destinationFilePath = RelativePathHelper.Combine(parentNode.Url, sluggedFileNameWithExtension);
                     var updateDate = File.GetLastWriteTimeUtc(filePath);
 
                     // if we have a custom index file, map this to the container directory
@@ -224,7 +245,7 @@ namespace Cofoundry.DocGenerator.Core
                         var node = new DocumentationNode()
                         {
                             Title = fileNameWithoutExtension,
-                            Url = FilePathHelper.CombineVirtualPath(parentNode.Url, sluggedFileName),
+                            Url = RelativePathHelper.Combine(parentNode.Url, sluggedFileName),
                             DocumentFilePath = destinationFilePath,
                             UpdateDate = updateDate
                         };
@@ -237,8 +258,8 @@ namespace Cofoundry.DocGenerator.Core
                 else if (fileExtension != ".json")
                 {
                     // static files are served out of a separate directory
-                    var destinationDirectory = FilePathHelper.CombineVirtualPath(STATIC_FOLDER_NAME, parentNode.Url);
-                    var destinationPath = FilePathHelper.CombineVirtualPath(destinationDirectory, sluggedFileNameWithExtension);
+                    var destinationDirectory = RelativePathHelper.Combine(STATIC_FOLDER_NAME, parentNode.Url);
+                    var destinationPath = RelativePathHelper.Combine(destinationDirectory, sluggedFileNameWithExtension);
 
                     await _fileWriterService.EnsureDirectoryExistsAsync(destinationDirectory);
                     await _fileWriterService.CopyFile(filePath, destinationPath);
@@ -248,7 +269,12 @@ namespace Cofoundry.DocGenerator.Core
             }
         }
 
-        private async Task ProcessChildDirectories(Dictionary<string, DocumentationNode> resultNodes, DocumentationNode parentNode, string directoryPath)
+        private async Task ProcessChildDirectories(
+            Dictionary<string, DocumentationNode> resultNodes, 
+            DocumentationNode parentNode, 
+            DocumentationNode rootNode,
+            string directoryPath
+            )
         {
             foreach (var childDirectoryPath in Directory.GetDirectories(directoryPath))
             {
@@ -258,13 +284,13 @@ namespace Cofoundry.DocGenerator.Core
                 var childNode = new DocumentationNode()
                 {
                     Title = directory.Name,
-                    Url = FilePathHelper.CombineVirtualPath(parentNode.Url, slug)
+                    Url = RelativePathHelper.Combine(parentNode.Url, slug)
                 };
 
                 childNode.UpdateDate = Directory.GetLastWriteTimeUtc(childDirectoryPath);
 
                 await _fileWriterService.EnsureDirectoryExistsAsync(childNode.Url);
-                await ProcessDirectory(childDirectoryPath, childNode);
+                await ProcessDirectory(childDirectoryPath, childNode, rootNode);
 
                 // Only add the node if it represents something in the document tree
                 // i.e. skip static resource directories.

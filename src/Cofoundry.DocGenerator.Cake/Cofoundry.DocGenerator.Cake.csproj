@@ -5,7 +5,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Cofoundry.Core" Version="0.8.0" />
+    <PackageReference Include="Cofoundry.Core" Version="0.9.3-reworking-user-a0101" />
     <PackageReference Include="WindowsAzure.Storage" Version="9.3.2" />
   </ItemGroup>
 
