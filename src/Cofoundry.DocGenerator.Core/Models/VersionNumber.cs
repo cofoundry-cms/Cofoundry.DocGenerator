@@ -1,23 +1,25 @@
-﻿using System;
+namespace Cofoundry.DocGenerator;
 
-namespace Cofoundry.DocGenerator
+public class VersionNumber : IComparable<VersionNumber>
 {
-    public class VersionNumber : IComparable<VersionNumber>
+    public int Major { get; set; }
+
+    public int Minor { get; set; }
+
+    public int Patch { get; set; }
+
+    public int CompareTo(VersionNumber? other)
     {
-        public int Major { get; set; }
-
-        public int Minor { get; set; }
-
-        public int Patch { get; set; }
-
-        public int CompareTo(VersionNumber other)
+        if (other == null)
         {
-            return (Major, Minor, Patch).CompareTo((other.Major, other.Minor, other.Patch));
+            return -1;
         }
 
-        public override string ToString()
-        {
-            return $"{Major}.{Minor}.{Patch}";
-        }
+        return (Major, Minor, Patch).CompareTo((other.Major, other.Minor, other.Patch));
+    }
+
+    public override string ToString()
+    {
+        return $"{Major}.{Minor}.{Patch}";
     }
 }
